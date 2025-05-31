@@ -1,0 +1,164 @@
+/* ===============================  SCHEMA  =============================== */
+
+-- 1️⃣ users
+CREATE TABLE IF NOT EXISTS users (
+  id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+  username          VARCHAR(50)  NOT NULL,
+  email             VARCHAR(255) NOT NULL UNIQUE,
+  password          VARCHAR(255) NOT NULL COMMENT 'bcrypt / argon hash only',
+  is_admin          BOOLEAN      NOT NULL DEFAULT FALSE,
+  is_email_verified BOOLEAN      NOT NULL DEFAULT FALSE,
+  is_activated      BOOLEAN      NOT NULL DEFAULT TRUE,
+  is_suspended      BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                   ON UPDATE CURRENT_TIMESTAMP
+) ENGINE = InnoDB;
+
+-- 2️⃣ conversations
+CREATE TABLE IF NOT EXISTS conversations (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  owner_id    BIGINT NOT NULL,
+  `type`      ENUM('PRIVATE', 'GROUP') NOT NULL DEFAULT 'PRIVATE',
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                         ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_conv_owner
+      FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- 3️⃣ refresh_tokens
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  token        VARCHAR(512) NOT NULL UNIQUE,
+  user_id      BIGINT NOT NULL,
+  expiry_date  TIMESTAMP    NOT NULL,
+  created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                            ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_refresh_user
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- 4️⃣ messages
+CREATE TABLE IF NOT EXISTS messages (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `text`          TEXT        NOT NULL,
+  user_id         BIGINT NOT NULL,
+  conversation_id BIGINT NOT NULL,
+  `status`        ENUM('sent', 'delivered', 'read') NOT NULL DEFAULT 'sent',
+  is_edited       BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_msg_user    FOREIGN KEY (user_id)         REFERENCES users(id),
+  CONSTRAINT fk_msg_conv    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+                               ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- 5️⃣ private_conversations (1-to-1 meta)
+CREATE TABLE IF NOT EXISTS private_conversations (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id BIGINT NOT NULL,           -- ⚠️ 1-to-1 guard
+  receiver_id     BIGINT NOT NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_priv_conv FOREIGN KEY (conversation_id)
+      REFERENCES conversations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_priv_receiver FOREIGN KEY (receiver_id)
+      REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE (conversation_id, receiver_id)
+) ENGINE = InnoDB;
+
+-- 6️⃣ group_conversations (group meta)
+CREATE TABLE IF NOT EXISTS group_conversations (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id BIGINT NOT NULL UNIQUE,
+  `name`          VARCHAR(255) NOT NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_grp_conv FOREIGN KEY (conversation_id)
+      REFERENCES conversations(id) ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- 7️⃣ group_members  (many-to-many)
+CREATE TABLE IF NOT EXISTS group_members (
+  user_id  BIGINT NOT NULL,
+  group_id BIGINT NOT NULL,
+  is_admin BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, group_id),
+  CONSTRAINT fk_grp_mem_user  FOREIGN KEY (user_id)  REFERENCES users(id),
+  CONSTRAINT fk_grp_mem_group FOREIGN KEY (group_id) REFERENCES group_conversations(id)
+                               ON DELETE CASCADE,
+  UNIQUE (user_id, group_id)
+) ENGINE = InnoDB;
+
+-- 8️⃣ notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  receiver_id BIGINT NOT NULL,
+  sender_id   BIGINT NOT NULL,
+  content     TEXT         NOT NULL,
+  `type`      ENUM('message', 'group', 'system') NOT NULL,
+  title       VARCHAR(255) NOT NULL,
+  link        VARCHAR(2048),
+  created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  unread      BOOLEAN      NOT NULL DEFAULT TRUE,
+  CONSTRAINT fk_notif_receiver FOREIGN KEY (receiver_id) REFERENCES users(id)
+                                  ON DELETE CASCADE,
+  CONSTRAINT fk_notif_sender   FOREIGN KEY (sender_id)   REFERENCES users(id)
+                                  ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+-- 9️⃣ reports
+CREATE TABLE IF NOT EXISTS reports (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `text`       TEXT NOT NULL,
+  reporter_id  BIGINT NOT NULL,
+  reported_id  BIGINT NOT NULL,
+  cause        TEXT NOT NULL,
+  `status`     ENUM('pending', 'resolved', 'dismissed') NOT NULL DEFAULT 'pending',
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_reporter FOREIGN KEY (reporter_id) REFERENCES users(id),
+  CONSTRAINT fk_reported FOREIGN KEY (reported_id) REFERENCES users(id)
+) ENGINE = InnoDB;
+
+-- 🔎 Helpful compound / filtered indexes
+CREATE INDEX idx_refresh_user      ON refresh_tokens(user_id);
+CREATE INDEX idx_refresh_expiry    ON refresh_tokens(expiry_date);
+CREATE INDEX idx_msg_conv          ON messages(conversation_id);
+CREATE INDEX idx_msg_user          ON messages(user_id);
+CREATE INDEX idx_conv_owner        ON conversations(owner_id);
+CREATE INDEX idx_notif_receiver    ON notifications(receiver_id);
+CREATE INDEX idx_notif_unread      ON notifications(receiver_id, unread);
+CREATE INDEX idx_notif_created_at  ON notifications(created_at); -- DESC not portable
+
+/* ============================  SEED DATA  =============================== */
+
+-- Users (password = "password")
+INSERT INTO users (username, email, password, is_admin, is_email_verified)
+VALUES 
+('admin',   'admin@gmail.com',   '$2a$10$xDvcMBovSUWCkCVufKFjLOzpFf6bbXTfYCBy1F9gYkOlg5p.UGjpe', TRUE , TRUE ),
+('yassine', 'yassine@gmail.com', '$2a$10$xDvcMBovSUWCkCVufKFjLOzpFf6bbXTfYCBy1F9gYkOlg5p.UGjpe', FALSE, TRUE ),
+('youssef', 'youssef@gmail.com', '$2a$10$xDvcMBovSUWCkCVufKFjLOzpFf6bbXTfYCBy1F9gYkOlg5p.UGjpe', FALSE, TRUE ),
+('hamid',   'hamid@gmail.com',   '$2a$10$xDvcMBovSUWCkCVufKFjLOzpFf6bbXTfYCBy1F9gYkOlg5p.UGjpe', FALSE, TRUE ),
+('yasser',  'yasser@gmail.com',  '5e884898da28047151d0e56f8$3d0d6aabbdd62a11ef721d1542d8',        FALSE, FALSE);
+
+-- Notifications
+INSERT INTO notifications (content, receiver_id, sender_id, `type`, title) VALUES
+('You have a new message',                   1, 2, 'message', 'New Message'),
+('You have a new message',                   2, 1, 'message', 'New Message'),
+('You were added to Project Team group',     3, 1, 'group'  , 'Added to Group'),
+('You have a new message',                   1, 4, 'message', 'New Message'),
+('Your account email has been verified',     5, 1, 'system' , 'Email Verified');
+
+-- Reports
+INSERT INTO reports (`text`, reporter_id, reported_id, cause, `status`) VALUES
+('This user is sending spam messages',    2, 5, 'spam'              , 'pending'),
+('Inappropriate content in messages',     3, 5, 'inappropriate'     , 'resolved'),
+('Harassment in private messages',        4, 5, 'harassment'        , 'pending');

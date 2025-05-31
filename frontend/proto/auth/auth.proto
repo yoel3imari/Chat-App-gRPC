@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package auth;
+
+import "user/user.proto";
+
+option java_multiple_files = true;
+option java_package = "com.adia.auth";
+option java_outer_classname = "AuthProto";
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc Logout(LogoutRequest) returns (Empty);
+  rpc VerifyToken(TokenRequest) returns (VerifyTokenResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (AuthResponse);
+}
+
+message RegisterRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LogoutRequest {
+  uint64 userId = 1;
+}
+
+message Empty {}
+
+message RefreshTokenRequest {
+  string refreshToken = 1;
+}
+
+message TokenRequest {
+  string token = 1;
+}
+
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3;
+  string refreshToken = 4;
+  int64 expiresIn=5;
+  user.User user = 6;
+}
+
+message VerifyTokenResponse {
+  bool valid = 1;
+  string message = 2;
+  user.User user = 3;
+  bool success = 4;
+}

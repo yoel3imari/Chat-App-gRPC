@@ -1,0 +1,168 @@
+services:
+
+  admin-service:
+    build:
+      context: ./backend/admin
+    ports:
+      - "${ADMIN_PORT}:${ADMIN_PORT}"
+      - "${SERVER_ADMIN_PORT}:${SERVER_ADMIN_PORT}"
+    container_name: admin-service
+    environment:
+      - GRPC_SERVER_PORT=${ADMIN_PORT}
+      - SPRING_SERVER_PORT=${SERVER_ADMIN_PORT}
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_REDIS_HOST=${REDIS_HOST}
+      - SPRING_REDIS_HOST=${SPRING_REDIS_HOST}
+      - SPRING_REDIS_PORT=${SPRING_REDIS_PORT}
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - chat-net
+
+  user-service:
+    build:
+      context: ./backend/user
+    ports:
+      - "${USER_PORT}:${USER_PORT}"
+      - "${SERVER_USER_PORT}:${SERVER_USER_PORT}"
+    container_name: user-service
+    environment:
+      - GRPC_SERVER_PORT=${USER_PORT}
+      - SERVER_PORT=${SERVER_USER_PORT}
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_DATA_REDIS_HOST=${REDIS_HOST}
+      - SPRING_DATA_REDIS_HOST=${SPRING_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_REDIS_PORT}
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - chat-net
+
+  auth-service:
+    build:
+      context: ./backend/auth
+    ports:
+      - "${AUTH_PORT}:${AUTH_PORT}"
+      - "${SERVER_AUTH_PORT}:${SERVER_AUTH_PORT}"
+    container_name: auth-service
+    environment:
+      - GRPC_SERVER_PORT=${AUTH_PORT}
+      - SERVER_PORT=${SERVER_AUTH_PORT}
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_DATA_REDIS_HOST=${REDIS_HOST}
+      - SPRING_DATA_REDIS_HOST=${SPRING_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_REDIS_PORT}
+    depends_on:
+      - mysql
+      - redis
+      - user-service
+    networks:
+      - chat-net
+
+  chat-service:
+    build:
+      context: ./backend/chat
+    ports:
+      - "${CHAT_PORT}:${CHAT_PORT}"
+      - "${SERVER_CHAT_PORT}:${SERVER_CHAT_PORT}"
+    container_name: chat-service
+    environment:
+      - GRPC_SERVER_PORT=${CHAT_PORT}
+      - SERVER_PORT=${SERVER_CHAT_PORT}
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_DATA_REDIS_HOST=${REDIS_HOST}
+      - SPRING_DATA_REDIS_HOST=${SPRING_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_REDIS_PORT}
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - chat-net 
+
+  notification-service:
+    build:
+      context: ./backend/notification
+    ports:
+      - "${NOTIFICATION_PORT}:${NOTIFICATION_PORT}"
+      - "${SERVER_NOTIFICATION_PORT}:${SERVER_NOTIFICATION_PORT}"
+    container_name: notification-service
+    environment:
+      - GRPC_SERVER_PORT=${NOTIFICATION_PORT}
+      - SERVER_PORT=${SERVER_NOTIFICATION_PORT}
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_DATA_REDIS_HOST=${REDIS_HOST}
+      - SPRING_DATA_REDIS_HOST=${SPRING_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_REDIS_PORT}
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - chat-net 
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: chat-frontend
+  #   ports:
+  #     - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+  #     - "3000:80"
+  #   depends_on:
+  #     - envoy
+  #   networks:
+  #     - chat-net
+
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: envoy
+    volumes:
+      - ./envoy:/etc/envoy
+    ports:
+      - "${ENVOY_PORT}:${ENVOY_PORT}"
+    command: /usr/local/bin/envoy -c /etc/envoy/envoy.yaml --log-level debug
+    networks:
+      - chat-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: chat-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${MYSQL_PORT}:3306"
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - chat-net
+
+  redis:
+    image: redis:alpine
+    container_name: chat-redis
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    networks:
+      - chat-net
+
+networks:
+  chat-net:
+    driver: bridge

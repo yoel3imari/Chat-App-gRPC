@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: grpc-messenger
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "200m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+      containers:
+      - name: user-service
+        image: grpc-messenger/user-service:latest
+        ports:
+        - containerPort: 9093
+        - containerPort: 8093
+        env:
+        - name: GRPC_SERVER_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: USER_PORT
+        - name: SERVER_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: SERVER_USER_PORT
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: SPRING_DATASOURCE_URL
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: SPRING_DATASOURCE_USERNAME
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grpc-messenger-secret
+              key: SPRING_DATASOURCE_PASSWORD
+        - name: SPRING_DATA_REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: SPRING_REDIS_HOST
+        - name: SPRING_DATA_REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: grpc-messenger-config
+              key: SPRING_REDIS_PORT
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8093
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8093
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: grpc-messenger
+spec:
+  selector:
+    app: user-service
+  ports:
+  - name: grpc
+    port: 9093
+    targetPort: 9093
+  - name: http
+    port: 8093
+    targetPort: 8093
+  type: ClusterIP

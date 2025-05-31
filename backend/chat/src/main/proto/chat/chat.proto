@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package chat;
+
+import "user/user.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "com.adia.chat.grpc";
+option java_outer_classname = "ChatProto";
+
+// Service definition
+service ChatService {
+  rpc GetPrivateConversations(PrivateConvsReq) returns (GetPrivConvsRes);
+  rpc GetPrivateConversation(GetPrivConvReq) returns (GetPrivConvRes);
+  rpc CreatePrivateConversation(CreatePrivConvReq) returns (PrivateConv);
+  rpc GetConvMessage (ConvMsgReq) returns (ConvMsgRes);
+  rpc StreamPrivateConversations(UserId) returns (stream PrivateConv);
+  rpc SendMessage(MessageReq) returns (Empty);
+  rpc StreamMessages(ConversationId) returns (stream Message);
+}
+
+message UserId {
+  int64 userId = 1;
+}
+
+message ConversationId {
+  int64 convId = 1;
+}
+
+message MessageReq {
+  string text = 1;
+  int64 convId = 2;
+  int64 userId = 3;
+}
+
+message ConvMsgReq {
+  int64 convId = 1;
+}
+
+message ConvMsgRes {
+  bool success = 1;
+  string message = 2;
+  repeated Message messageList = 3;
+}
+
+
+message GetPrivConvReq {
+  int64 currUserId = 1;
+  int64 otherUserId = 2;
+}
+
+message GetPrivConvRes {
+  int64 id = 1;
+  repeated Message messages = 2;
+}
+
+message CreatePrivConvReq {
+  int64 currUserId = 1;
+  int64 otherUserId = 2;
+}
+
+message CreatePrivConvRes {
+  int64 conversationId = 1;
+  int64 currUserId = 2;
+  int64 receiver_id = 3;
+  string created_at = 4;
+}
+
+message PrivateConvsReq {
+  int64 userId = 1;
+}
+
+message GetPrivConvsRes {
+  string message = 1;
+  bool success = 2;
+  repeated PrivateConv privateConvList = 3;
+}
+
+message PrivateConv {
+  int64 id = 1;
+  user.User user1 = 2;
+  user.User user2 = 5;
+  string lastMessage = 3;
+  int32 unreadCount = 4;
+  google.protobuf.Timestamp lastUpdate = 8;
+}
+
+message GroupConv {
+  int64 id = 1;
+  string name = 2;
+  string lastMessage = 3;
+  int32 unreadCount = 4;
+  google.protobuf.Timestamp lastUpdate = 8;
+}
+
+// Message status enum
+enum MessageStatus {
+  SENT = 0;
+  DELIVERED = 1;
+  READ = 2;
+}
+
+// Message
+message Message {
+  int64 id = 1;
+  int64 userId = 2;
+  int64 conversationId = 3;
+  string text = 4;
+  bool edited = 5;
+  MessageStatus status = 6;
+  string createdAt = 7;
+  string updatedAt = 8;
+}
+
+enum ConvType {
+  PRIVATE = 0;
+  GROUP = 1;
+}
+
+message Empty {} 
